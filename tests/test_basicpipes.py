@@ -3,10 +3,13 @@ import findspark
 findspark.init()
 from pyspark.sql import SparkSession
 from pyspark.ml import feature
-
+from pyspark.sql import types
 
 from sparkml_pipes.ml_pipes import pipe_function
 from sparkml_pipes.base_pipe import take
+
+SPARK_SESSION = SparkSession.builder.getOrCreate()
+SPARK_SESSION.sparkContext.setLogLevel("OFF")
 
 
 def test_rddcreation():
@@ -23,7 +26,16 @@ def test_basicpipes():
 
 
 def test_otherpipes():
-    SPARK_SESSION = SparkSession.builder.getOrCreate()
-    df = SPARK_SESSION.range(100)
 
-    return df | feature.Tokenizer().setInputCol('id')
+    df = SPARK_SESSION.sparkContext.\
+        parallelize([['this is a test'], ['this is another test']]).\
+        toDF(schema=types.StructType().add('sentence', types.StringType()))
+
+    pl = feature.Tokenizer().setInputCol('sentence') \
+         | (feature.CountVectorizer() \
+         | feature.IDF())
+    pl_model = pl.fit(df)
+    pl_model.transform(df).show()
+
+if __name__ == '__main__':
+    test_otherpipes()

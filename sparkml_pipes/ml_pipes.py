@@ -23,37 +23,25 @@ def isanyinstance(o, typelist):
 
 def pipe_function(self, other):
     if not isanyinstance(self, ALLOWED_TYPES):
-        raise Exception("For now, it only accepts primitive estimators and transfomers")
+        raise Exception("For now, it only accepts primitive estimators and transfomers " \
+                        "to the right-hand side")
 
-    # check if input to pipeline is a dataframe
-    if isinstance(other, DataFrame):
-        if hasattr(other, 'df'):
-            raise Exception("there is already a dataframe in the pipeline ({})".format(self.df))
-
-        pl = Pipeline.setStages([self])
-        pl.df = other
-        return pl
+    # At the start of the Pipeline we need to put together two things
+    if not isinstance(other, Pipeline):
+        return Pipeline().setStages([other]) | self
     else:
         last_step = other.getStages()[-1]
         if isinstance(last_step, HasOutputCol):
             # let's generate some random string to represent the column's name
-            if not last_step.isSet('OutputCol'):
-                last_step_output = str(type(last_step)) + str(uuid.uuid1())[0:8]
-            else:
-                last_step_output = last_step.getOutputCol()
+            last_step_output = last_step.getOutputCol()
         if isinstance(last_step, HasPredictionCol):
-            if not last_step.isSet('PredictionCol'):
-                last_step_output = str(type(last_step)) + str(uuid.uuid1())[0:8]
-            else:
-                last_step_output = last_step.getPredictionCol()
+            last_step_output = last_step.getPredictionCol()
 
         # should we connect input with output?
         if isinstance(self, HasInputCol):
-            if not self.isSet('InputCol'):
+            if not self.isSet('inputCol'):
                 self.setInputCol(last_step_output)
 
-        new_pl = Pipeline.setStages([other.getStages(), self])
-        new_pl.df = other.df
-        return new_pl
+        return Pipeline().setStages(other.getStages() + [self])
 
 Params.__ror__ = pipe_function
