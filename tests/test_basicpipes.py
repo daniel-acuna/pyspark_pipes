@@ -4,9 +4,9 @@ findspark.init()
 from pyspark.sql import SparkSession, Row
 from pyspark.ml import feature, classification
 from pyspark.sql import types
-import sparkml_pipes
+import pyspark_pipes
 
-sparkml_pipes.patch()
+pyspark_pipes.patch()
 
 SPARK_SESSION = SparkSession.builder.getOrCreate()
 SPARK_SESSION.sparkContext.setLogLevel("OFF")
