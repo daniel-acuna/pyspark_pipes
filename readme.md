@@ -2,79 +2,98 @@
 
 ## Introduction
 
-Writing analytic pipelines is part of being a data scientists. 
-Spark ML allows you write such pipelines while working with Big Data 
-[Pipelines](https://spark.apache.org/docs/latest/ml-pipeline.html). However, when the analyses are complex, 
-the syntax for creating, modifying, and maintaining them can be cumbersome. 
+Writing analytic pipelines is part of being a data scientist. 
+Spark ML has [Pipelines](https://spark.apache.org/docs/latest/ml-pipeline.html) 
+for working with Big Data. 
+However, the syntax for creating, modifying, and maintaining complex pipes 
+can be cumbersome. 
 
-This packages tries to solve this problem by making available a *pipe* operator `|` that stitches together
-several analytic stages. It automatically figures out how to match the output or prediction columns of previous steps
+This packages tries to solve this problem by creating a *pipe* operator `|` 
+that seamlessly stitches together instances of `Estimator` or `Transformer`. 
+It automatically figures out how to match the output or 
+prediction columns of previous steps
 with the input column or columns of the next steps. 
-It also allows to broadcast one output column to several other steps or, 
-vice versa, take several output columns as an input to one step
+It also allows to broadcast one output column to several other steps. Or 
+vice versa take several output columns as an input to one step
 (e.g., when using [VectorAssembler](https://spark.apache.org/docs/latest/ml-features.html#vectorassembler)).
 
-Inspiration for writing the pipe operator is drawn from https://github.com/JulienPalard/Pipe
+Inspiration for writing the pipe operator is due to 
+https://github.com/JulienPalard/Pipe
 
-## Examples
+### Get started
 
-This package started because of the frustration I personally felt when developing NLP analyses. These analyses
-typically require several steps to produce features, such as tokenization, stop word removal, and count of the term
-vectors.
-
-In vanilla Spark, these steps would be as follows
-
+**vanilla Spark ML**
 ```python
-from pyspark.ml import feature
-from pyspark.ml import Pipeline
-from pysparl.ml import classification
-
-df = spark.sparkContext. \
-        parallelize([['this is one sentence', 1.],
-                     ['this is another sentence', 0.]]).toDF(['sentence', 'label'])
-
-pl = Pipeline(stages=[feature.Tokenizer().setInputColumn('sentence').setOutputCol('words'),
+Pipeline(stages=[feature.Tokenizer().setInputColumn('sentence').setOutputCol('words'),
     feature.CountVectorizer().setInputCol('words').setOutputCol('tf'),
     classification.LogisticRegression().setFeaturesCol('tf')])
 ```
 
-Now, this is an already verbose method to build a pipeline. But it gets worse when we want to insert a step in it.
-
-For example, suppose that we want to use the tf-idf vector instead of the raw tf vectors. Then, we would need to
-do something like this
-
-```python
-pl_idf = Pipeline(stages=[feature.Tokenizer().setInputColumn('sentence').setOutputCol('words'),
-    feature.CountVectorizer().setInputCol('words').setOutputCol('tf'),
-    feature.IDF().setInputCol('tf').setOutputCol('tfidf'),
-    classification.LogisticRegression().setFeaturesCol('tfidf')])
-```
-
-The problem is that this insertion changed the pipeline in two points: the point of insertion and subsequent stage.
-
-Compare it with using `pyspark_pipes`
-
+**with `pyspark_pipes`**
 ```python
 import pyspark_pipes
-# necessary for monkey patching Estimators and Transformers (or any Params)
 pyspark_pipes.patch()
 
 pl = feature.Tokenizer().setInputCol('sentence') | \
     feature.CountVectorizer() | \
     feature.LogisticRegression()
+```
 
+## Details
+
+I started this package out of frustration while 
+developing NLP analyses. These analyses
+typically required several steps to produce features, such as tokenization, 
+stop word removal, and count of term vectors. The problems started
+when I wanted to add additional steps in the middle of the pipeline.
+
+In vanilla Spark, an initial analysis might look like this:
+
+```python
+pl = Pipeline(stages=[
+    feature.Tokenizer().setInputColumn('sentence').setOutputCol('words'),
+    feature.CountVectorizer().setInputCol('words').setOutputCol('tf'),
+    classification.LogisticRegression().setFeaturesCol('tf')
+    ])
+```
+
+Now, this is  already verbose. But now suppose that we want to use the tf-idf vector instead of the raw tf vectors. 
+Then, we would need to do something like this
+
+```python
+pl_idf = Pipeline(stages=[
+    feature.Tokenizer().setInputColumn('sentence').setOutputCol('words'),
+    feature.CountVectorizer().setInputCol('words').setOutputCol('tf'),
+    feature.IDF().setInputCol('tf').setOutputCol('tfidf'),
+    classification.LogisticRegression().setFeaturesCol('tfidf')])
+```
+
+This insertion changed the pipeline in two points: the point of insertion and subsequent stage.
+
+Compare it with using `pyspark_pipes` for the tf pipeline
+
+```python
+pl = feature.Tokenizer().setInputCol('sentence') | \
+    feature.CountVectorizer() | \
+    classification.LogisticRegression()
+```
+
+and the tf-idf pipeline
+
+```python
 pl_idf = feature.Tokenizer().setInputCol('sentence') | \
     feature.CountVectorizer() | \
     feature.IDF() | \
     classification.LogisticRegression()
 ```
 
-And there it is! Now we have two pipelines in the same space as one pipeline definition in vanilla Spark.
-It is much easier to read, modify, and maintain!
+And there it is! It is much easier to read, modify, and maintain!
+### Advanced examples
 
-Below is a real example of something that I do all the time: stop word removal, uni-grams, and bi-grams.
- 
+#### Bigrams
+
  ```python
+ from pyspark.ml import feature, classification
 # base tokenizer
 tokenizer = feature.Tokenizer().setInputCol('sentence') | feature.StopWordsRemover(stopWords=stop_words)
 # unigrams and bigrams
@@ -82,15 +101,23 @@ unigram = feature.CountVectorizer()
 bigram = feature.NGram(n = 2) | feature.CountVectorizer()
 # put together unigrams and bigrams
 tf = tokenizer | (unigram, bigram) | feature.VectorAssembler()
-pl_tfidf = tf | feature.IDF()
+pl_tfidf = tf | feature.IDF().setOutputCol('features')
 ```
 
-Now it will be easy to just do a Logistic Regression on the tf-idf vectors
+#### Wisdom of the crowds - multiple algorithms
 
-```python
-from pyspark.ml import classification
-pl_ml = pl_tfidf | classification.LogisticRegression()
-pl_model = pl_ml.fit(some_dataframe)
+ ```python
+from pyspark.ml import feature, classification
+
+features = feature.Tokenizer().setInputCol('sentence') | \
+    feature.CountVectorizer()
+meta_features = (classification.LogisticRegression(),
+        classification.RandomForestClassifier(),
+        classification.LogisticRegression().setElasticNetParam(0.2),
+        classification.GBTClassifier()
+        ) | feature.VectorAssembler()
+combiner = classification.LogisticRegression()
+pl_woc = features | meta_features | combiner.setPredictionCol('prediction')
 ```
 
 
@@ -106,7 +133,6 @@ Feel free to file an issue or contribute, or both!
 
 ## TODO
 
-1. It does not play nicely when combining several predictors because those predictors do not generate random column names  
 1. Saving the fitted pipelines has not been tested
 
 For more, check the issues!

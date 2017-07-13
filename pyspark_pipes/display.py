@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """
 Some pipeline display functionality
 """
@@ -7,21 +8,26 @@ from pyspark.ml.param.shared import HasFeaturesCol, HasInputCol, \
     HasInputCols, HasPredictionCol, HasOutputCol
 
 
-def print_stage(p):
-    if isinstance(p, Pipeline):
-        return "[\n" + ','.join([print_stage(s) for s in p.getStages()]) + "\n]"
+def print_stage(pipe):
+    """
+    Print stage of a pipeline even recursively
+    :param pipe: Pipeline
+    :return: str
+    """
+    if isinstance(pipe, Pipeline):
+        return "[\n" + ','.join([print_stage(s) for s in pipe.getStages()]) + "\n]"
     else:
-        r = ""
-        if isinstance(p, HasInputCol):
-            r += p.getInputCol()
-        elif isinstance(p, HasInputCols):
-            r += str(p.getInputCols())
-        elif isinstance(p, HasFeaturesCol):
-            r += p.getFeaturesCol()
+        result = ""
+        if isinstance(pipe, HasInputCol):
+            result += pipe.getInputCol()
+        elif isinstance(pipe, HasInputCols):
+            result += str(pipe.getInputCols())
+        elif isinstance(pipe, HasFeaturesCol):
+            result += pipe.getFeaturesCol()
 
-        r += " - "
-        if isinstance(p, HasOutputCol):
-            r += p.getOutputCol()
-        elif isinstance(p, HasPredictionCol):
-            r += p.getPredictionCol()
-        return r
+        result += " - "
+        if isinstance(pipe, HasOutputCol):
+            result += pipe.getOutputCol()
+        elif isinstance(pipe, HasPredictionCol):
+            result += pipe.getPredictionCol()
+        return result

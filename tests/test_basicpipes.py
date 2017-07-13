@@ -1,6 +1,9 @@
 from nose.tools import assert_equal
-import findspark
-findspark.init()
+try:
+    import pyspark
+except:
+    import findspark
+    findspark.init()
 from pyspark.sql import SparkSession, Row
 from pyspark.ml import feature, classification
 from pyspark.sql import types
@@ -65,10 +68,29 @@ def test_stackedml_pipe():
     pl = feature.Tokenizer().setInputCol('sentence') | feature.CountVectorizer()
     ml = pl | (classification.LogisticRegression(),) | feature.VectorAssembler() | \
         classification.\
-        RandomForestClassifier().\
-        setPredictionCol('final_prediction').\
-        setRawPredictionCol('final_raw_predictions').\
-        setProbabilityCol('final_probability')
+        RandomForestClassifier()
 
     ml_model = ml.fit(df)
     assert_equal(ml_model.transform(df).count(), 2)
+
+
+def test_multi_model_pipe():
+    df = SPARK_SESSION.sparkContext. \
+        parallelize([Row(sentence='this is a test', label=0.),
+                     Row(sentence='this is another test', label=1.)]).\
+        toDF()
+
+    pl = feature.Tokenizer().setInputCol('sentence') | feature.CountVectorizer()
+    models = (classification.LogisticRegression(),
+        classification.RandomForestClassifier(),
+        classification.LogisticRegression().setElasticNetParam(0.2),
+        classification.GBTClassifier()
+    )
+    ml = pl | models | feature.VectorAssembler().setOutputCol('final_features') | \
+        classification.LogisticRegression()
+
+    ml_model = ml.fit(df)
+    assert_equal(ml_model.transform(df).count(), 2)
+
+if __name__ == '__main__':
+    test_multi_model_pipe()
