@@ -75,7 +75,7 @@ def left_pipe_function(self, other):
     self = set_default_colnames(self)
     # At the start of the Pipeline we need to put together two things
     if isanyinstance(other, ALLOWED_TYPES):
-        result = Pipeline().setStages([other]) | self
+        result = left_pipe_function(self, Pipeline().setStages([other]))
     elif isinstance(other, Pipeline):
         last_step = set_default_colnames(get_pipeline_laststep(other))
         if isinstance(last_step, HasOutputCol):
@@ -189,3 +189,12 @@ def patch():
     """
     Params.__or__ = right_pipe_function
     Params.__ror__ = left_pipe_function
+
+
+def pipe(*stages):
+    if len(stages) == 0:
+        return None
+    initial = stages[0]
+    for s in stages[1:]:
+        initial = left_pipe_function(s, initial)
+    return initial
