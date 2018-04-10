@@ -7,6 +7,7 @@ from pyspark.ml.param.shared import HasFeaturesCol, HasInputCol, \
     HasRawPredictionCol, HasProbabilityCol
 
 from pyspark.ml import Pipeline
+from pyspark.ml.pipeline import PipelineModel
 
 ALLOWED_TYPES = (HasFeaturesCol, HasInputCol, HasInputCols, HasLabelCol,
                  HasPredictionCol, HasOutputCol)
@@ -198,3 +199,14 @@ def pipe(*stages):
     for s in stages[1:]:
         initial = left_pipe_function(s, initial)
     return initial
+
+
+def flatten_pipeline(p_or_list):
+    if type(p_or_list) is PipelineModel:
+        return flatten_pipeline(p_or_list.stages)
+    elif type(p_or_list) is not PipelineModel and type(p_or_list) is not list:
+        return [p_or_list]
+    elif type(p_or_list) is list and len(p_or_list) > 0:
+        return flatten_pipeline(p_or_list[0]) + flatten_pipeline(p_or_list[1:])
+    elif type(p_or_list) is list and len(p_or_list) == 0:
+        return []
